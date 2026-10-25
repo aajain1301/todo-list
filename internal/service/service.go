@@ -114,11 +114,11 @@ func (s *TaskService) ListTasks(filter domain.TaskFilter) ([]domain.Task, error)
 	if filter.Scope == domain.ScopeCompleted {
 		source = s.tasks.Closed
 	}
-	matches := filter.Matcher(s.clock.Now())
+	matches := filter.Matcher()
 
 	var found []*domain.Task
 	for _, t := range source() {
-		if matches(t) {
+		if t.Status != domain.StatusRemoved && matches(t) {
 			found = append(found, t)
 		}
 	}

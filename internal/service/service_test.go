@@ -117,19 +117,22 @@ func TestRemoveTask(t *testing.T) {
 	if ids := listIDs(t, s, domain.TaskFilter{Scope: domain.ScopePending}); len(ids) != 0 {
 		t.Errorf("removed task still listed: %v", ids)
 	}
+	if ids := listIDs(t, s, domain.TaskFilter{Scope: domain.ScopeCompleted}); len(ids) != 0 {
+		t.Errorf("removed task listed as completed: %v", ids)
+	}
 	if err := s.RemoveTask(task.ID); !errors.Is(err, domain.ErrTaskNotFound) {
 		t.Errorf("second RemoveTask: err = %v, want ErrTaskNotFound", err)
 	}
 }
 
 func TestCompleteTask(t *testing.T) {
-	s, _ := newService()
+	s, clk := newService()
 	task := mustAdd(t, s, domain.Task{OwnerID: "alice", Title: "Write report"})
 
 	if err := s.CompleteTask(task.ID); err != nil {
 		t.Fatalf("CompleteTask: %v", err)
 	}
-	if ids := listIDs(t, s, domain.TaskFilter{}); len(ids) != 0 {
+	if ids := listIDs(t, s, domain.TaskFilter{Filters: []domain.Filter{domain.Active(clk.Now())}}); len(ids) != 0 {
 		t.Errorf("completed task still on the TODO list: %v", ids)
 	}
 	if ids := listIDs(t, s, domain.TaskFilter{Scope: domain.ScopeCompleted}); !slices.Equal(ids, []domain.TaskID{task.ID}) {
@@ -146,12 +149,18 @@ func TestListTasks(t *testing.T) {
 	sooner := mustAdd(t, s, domain.Task{OwnerID: "alice", Title: "Due sooner", Deadline: start.Add(2 * time.Hour)})
 	future := mustAdd(t, s, domain.Task{OwnerID: "alice", Title: "File taxes", VisibleFrom: start.Add(24 * time.Hour)})
 
-	if got, want := listIDs(t, s, domain.TaskFilter{}), []domain.TaskID{sooner.ID, later.ID}; !slices.Equal(got, want) {
+	active := func() domain.TaskFilter {
+		return domain.TaskFilter{Filters: []domain.Filter{domain.Active(clk.Now())}}
+	}
+	if got, want := listIDs(t, s, active()), []domain.TaskID{sooner.ID, later.ID}; !slices.Equal(got, want) {
 		t.Errorf("active list = %v, want %v (future task hidden, sorted by deadline)", got, want)
+	}
+	if got, want := listIDs(t, s, domain.TaskFilter{Filters: []domain.Filter{domain.Upcoming(clk.Now())}}), []domain.TaskID{future.ID}; !slices.Equal(got, want) {
+		t.Errorf("upcoming list = %v, want %v", got, want)
 	}
 
 	clk.Advance(24 * time.Hour)
-	if got := listIDs(t, s, domain.TaskFilter{}); !slices.Contains(got, future.ID) {
+	if got := listIDs(t, s, active()); !slices.Contains(got, future.ID) {
 		t.Errorf("active list after VisibleFrom = %v, want it to include %s", got, future.ID)
 	}
 

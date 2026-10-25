@@ -178,7 +178,7 @@ func TestTaskFilter_Matcher(t *testing.T) {
 		task("other-tag", base, "home"),
 	}
 
-	matches := domain.TaskFilter{Tags: []string{"work"}}.Matcher(now)
+	matches := domain.TaskFilter{Filters: []domain.Filter{domain.Active(now), domain.HasTags("work")}}.Matcher()
 
 	var got []domain.TaskID
 	for _, tk := range tasks {
@@ -188,6 +188,49 @@ func TestTaskFilter_Matcher(t *testing.T) {
 	}
 	if want := []domain.TaskID{"match"}; !slices.Equal(got, want) {
 		t.Errorf("matched %v, want %v", got, want)
+	}
+}
+
+func TestTaskFilter_Predicates(t *testing.T) {
+	tasks := []*domain.Task{
+		{ID: "soon", Title: "Write Report", Status: domain.StatusPending, Deadline: hoursAfter(3)},
+		{ID: "late", Title: "Buy milk", Status: domain.StatusPending, Deadline: hoursAfter(10)},
+		{ID: "none", Title: "Call mom", Status: domain.StatusPending},
+	}
+	cutoff := hoursAfter(5)
+
+	tests := []struct {
+		name   string
+		filter domain.TaskFilter
+		want   []domain.TaskID
+	}{
+		{"due before", domain.TaskFilter{Filters: []domain.Filter{domain.DueBefore(cutoff)}}, []domain.TaskID{"soon"}},
+		{"due after", domain.TaskFilter{Filters: []domain.Filter{domain.DueAfter(cutoff)}}, []domain.TaskID{"late"}},
+		{"title contains is case-insensitive", domain.TaskFilter{Filters: []domain.Filter{domain.TitleContains("report")}}, []domain.TaskID{"soon"}},
+		{"predicates are ANDed", domain.TaskFilter{Filters: []domain.Filter{domain.HasDeadline(), domain.TitleContains("milk")}}, []domain.TaskID{"late"}},
+		{"not", domain.TaskFilter{Filters: []domain.Filter{domain.Not(domain.HasDeadline())}}, []domain.TaskID{"none"}},
+		{"or", domain.TaskFilter{Filters: []domain.Filter{domain.Or(domain.DueBefore(cutoff), domain.TitleContains("mom"))}}, []domain.TaskID{"soon", "none"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			matches := tc.filter.Matcher()
+			var got []domain.TaskID
+			for _, tk := range tasks {
+				if matches(tk) {
+					got = append(got, tk.ID)
+				}
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("matched %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTaskFilter_Validate_NilPredicate(t *testing.T) {
+	f := domain.TaskFilter{Filters: []domain.Filter{nil}}
+	if err := f.Validate(); !errors.Is(err, domain.ErrInvalidFilter) {
+		t.Errorf("nil predicate: err = %v, want ErrInvalidFilter", err)
 	}
 }
 
