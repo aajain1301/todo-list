@@ -3,6 +3,7 @@ package service_test
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
@@ -179,12 +180,14 @@ func TestGetStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (domain.Statistics{Added: 3, Completed: 2, SpilledOver: 1}); got != want {
+	want := domain.Statistics{service.MetricAdded: 3, service.MetricCompleted: 2, service.MetricSpilledOver: 1}
+	if !maps.Equal(got, want) {
 		t.Errorf("all-time stats = %+v, want %+v", got, want)
 	}
 
 	quiet := &domain.TimePeriod{Start: start.Add(5 * time.Hour), End: start.Add(6 * time.Hour)}
-	if got, _ := s.GetStatistics(quiet); got != (domain.Statistics{}) {
+	want = domain.Statistics{service.MetricAdded: 0, service.MetricCompleted: 0, service.MetricSpilledOver: 0}
+	if got, _ := s.GetStatistics(quiet); !maps.Equal(got, want) {
 		t.Errorf("stats for an empty period = %+v, want zero", got)
 	}
 }

@@ -27,11 +27,16 @@ type TaskService struct {
 	clock    clock.Clock
 	tasks    TaskRepository
 	activity ActivityRepository
+	stats    *Statistics
 	seq      uint64
 }
 
 func New(clk clock.Clock, tasks TaskRepository, activity ActivityRepository) *TaskService {
-	return &TaskService{clock: clk, tasks: tasks, activity: activity}
+	return &TaskService{clock: clk, tasks: tasks, activity: activity, stats: NewStatistics(
+		addedMetric{activity},
+		completedMetric{activity},
+		spilledOverMetric{clk, tasks},
+	)}
 }
 
 func (s *TaskService) AddTask(task domain.Task) (domain.Task, error) {
@@ -138,27 +143,7 @@ func (s *TaskService) GetStatistics(period *domain.TimePeriod) (domain.Statistic
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	var stats domain.Statistics
-	for _, e := range s.activity.Range(period) {
-		switch e.Type {
-		case domain.EventAdded:
-			stats.Added++
-		case domain.EventCompleted:
-			stats.Completed++
-		}
-	}
-
-	// Spilled-over is counted by deadline, so it needs closed tasks too.
-	now := s.clock.Now()
-	for _, tasks := range [][]*domain.Task{s.tasks.Pending(), s.tasks.Closed()} {
-		for _, t := range tasks {
-			if t.SpilledOver(now) && period.Contains(t.Deadline) {
-				stats.SpilledOver++
-			}
-		}
-	}
-	return stats, nil
+	return s.stats.GetAllStatistics(period), nil
 }
 
 func (s *TaskService) GetActivityLog(period *domain.TimePeriod) ([]domain.ActivityEvent, error) {

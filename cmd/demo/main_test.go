@@ -26,7 +26,7 @@ func TestRun(t *testing.T) {
 
 	for _, want := range []string{
 		"completed: T-1 Write final report",
-		"stats: {Added:2 Completed:1 SpilledOver:1}",
+		"stats: map[added:2 completed:1 spilled_over:1]",
 		"MODIFIED", "COMPLETED", "REMOVED",
 	} {
 		if !strings.Contains(out.String(), want) {

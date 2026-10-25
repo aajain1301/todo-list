@@ -158,8 +158,4 @@ func (p *TimePeriod) Contains(t time.Time) bool {
 	return p == nil || (!t.Before(p.Start) && t.Before(p.End))
 }
 
-type Statistics struct {
-	Added       int
-	Completed   int
-	SpilledOver int // tasks whose deadline fell in the period and was missed (see Task.SpilledOver)
-}
+type Statistics map[string]int
